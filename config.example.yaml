@@ -1,0 +1,71 @@
+# ===================== DomainMonitor 配置示例 =====================
+# 复制为 config.yaml 后修改。时长支持 "0.5s" / "5s" / "500ms" 格式。
+
+# ---------- 查询节奏 ----------
+query:
+  sleep_min: 0.5s         # 每次查询完成后的随机休眠下限
+  sleep_max: 5s           # 随机休眠上限（实际休眠在 [min, max] 内随机取值）
+  timeout: 10s            # 单次 RDAP/WHOIS 查询超时
+  retries: 2              # RDAP 与 WHOIS 都失败时的整体重试次数
+  proxy: ""               # RDAP 使用的 HTTP 代理，如 http://127.0.0.1:7890；留空直连
+
+  # 按域名当前状态决定的最小检查间隔（上面的 sleep 只负责“查询之间的节奏”）：
+  #   赎回期状态稳定且长达约 30 天，一天确认一次足够了；
+  #   待删除期是随时可能释放的关键窗口，保持快速轮询（0 = 每轮都查）；
+  #   可注册之后只需偶尔确认是否被人注册。
+  intervals:
+    redemption_period: 24h  # 赎回期，默认 24h
+    pending_delete: 0s      # 待删除，默认 0s（即每轮都查，用上面的 sleep 快节奏）
+    available: 30m          # 可注册后，默认 30m
+
+# ---------- Server酱³ 推送 (https://sc3.ft07.com) ----------
+serverchan:
+  uid: ""                 # uid 可留空：sendkey 形如 sctp{uid}t... 时自动提取
+  sendkey: "sctp12345t把这里换成你的SendKey"
+  tags: "域名监控"         # 推送标签，可选
+
+# ---------- 后缀 → 查询地址 ----------
+# 查询规则：优先 RDAP；RDAP 查询失败自动降级 WHOIS；未配置 RDAP 则只用 WHOIS。
+# RDAP 地址支持 {domain} 占位符，没有占位符时会把域名拼在末尾。
+# notfound_marker 可选：覆盖该后缀 WHOIS "未注册" 判定关键词（默认词表见 README）。
+tlds:
+  - suffix: com
+    whois: whois.verisign-grs.com
+    rdap: https://rdap.verisign.com/com/v1/domain/{domain}
+  - suffix: net
+    whois: whois.verisign-grs.com
+    rdap: https://rdap.verisign.com/net/v1/domain/{domain}
+  - suffix: org
+    whois: whois.publicinterestregistry.org
+    rdap: https://rdap.publicinterestregistry.org/rdap/domain/{domain}
+  - suffix: dev
+    whois: whois.nic.google
+    rdap: https://pubapi.registry.google/rdap/domain/{domain}
+  - suffix: cn            # .cn 未登记官方 RDAP → 始终走 WHOIS
+    whois: whois.cnnic.cn
+    rdap: ""
+  - suffix: jp            # .jp 同上
+    whois: whois.jprs.jp
+    rdap: ""
+
+# ---------- 监控列表 ----------
+# 填写当前处于待删除阶段（pendingDelete / redemptionPeriod）的域名。
+# IDN 域名请写成 punycode（xn-- 开头）。
+domains:
+  - example.com           # ← 换成你要监控的域名
+  - foo.net
+
+# ---------- 配置热更新 ----------
+# 运行中修改本文件会自动生效：新增/移除域名、增删后缀、改 whois/RDAP 地址、
+# 改查询参数、换推送凭据、改日志级别等。新配置非法时自动回退到旧配置，监控不中断。
+# 注意：从 domains 移除域名会同时清理其状态；重新加入会按初始状态重新开始。
+reload:
+  enabled: true           # 是否监听配置变更，默认 true
+  interval: 1s            # 检测间隔（内容哈希轮询，最小 100ms）
+
+# ---------- 可选项 ----------
+remove_when: registered   # 何时移出监控列表: registered(默认,被注册后) / available(可注册时)
+notify_stage_change: true # 赎回期 ↔ 待删除 的阶段变化是否也推送；false 则只推可注册/已注册
+state_file: state.json    # 状态文件路径
+log_level: info           # debug / info / warn / error（支持热更新调整）
+notify_on_error: false    # 连续查询失败达 20 次时是否推送提醒

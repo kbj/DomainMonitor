@@ -1,0 +1,11 @@
+# 编译产物
+/domainmonitor
+/domainmonitor.exe
+
+# 运行时状态与日志
+state.json
+state.json.tmp
+*.log
+
+# 本地配置（内含真实 sendkey，不要提交；示例见 config.example.yaml）
+config.yaml
